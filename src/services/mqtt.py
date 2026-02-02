@@ -6,6 +6,20 @@ from src.config import MQTT_BROKER, MQTT_PORT
 from src.state import state
 from src.services.simulation import start_simulation
 
+mqtt_client = None
+
+def publish_command(topic, payload):
+    global mqtt_client
+    if mqtt_client and state.status["connection"] == "ONLINE":
+        try:
+            if isinstance(payload, dict):
+                payload = json.dumps(payload)
+            mqtt_client.publish(topic, payload)
+            return True
+        except Exception as e:
+            state.log(f"Error publishing MQTT: {e}", "ERROR")
+    return False
+
 def on_mqtt_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         state.log("Conexión MQTT establecida", "SUCCESS")
@@ -83,6 +97,10 @@ def start_mqtt():
             client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         except Exception:
             client = mqtt.Client()
+        
+        global mqtt_client
+        mqtt_client = client
+        
         client.on_connect = on_mqtt_connect
         client.on_disconnect = on_mqtt_disconnect
         client.on_message = on_mqtt_message

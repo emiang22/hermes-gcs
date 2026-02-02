@@ -22,7 +22,7 @@ except ImportError:
 # Import internal modules
 from src.config import CONFIG, ROBOT_IP, CAMERA_PORT, MQTT_BROKER
 from src.state import state, db_manager # db_manager starts automatically
-from src.services.mqtt import start_mqtt
+from src.services.mqtt import start_mqtt, publish_command
 from src.services.replay import replay_service
 from src.ui.app_layout import get_layout, COLORS
 from src.ui.views.teleop import view_teleop
@@ -250,10 +250,7 @@ def control_robot(*args):
     btn = ctx.triggered[0]['prop_id'].split('.')[0]
     cmd = {"btn-forward": "FORWARD", "btn-backward": "BACKWARD", "btn-left": "LEFT", "btn-right": "RIGHT"}.get(btn, "STOP")
     state.log(f"Comando enviado: {cmd}")
-    try:
-        threading.Thread(target=lambda: requests.get(f"http://{ROBOT_IP}/control?var=move&val={cmd.lower()}", timeout=0.5), daemon=True).start()
-    except Exception:
-        pass
+    publish_command("hermes/control", {"command": cmd})
     return dash.no_update
 
 @app.callback(
@@ -265,12 +262,8 @@ def update_led_intensity(value):
     if state.status["mode"] != "MQTT":
          return f"Intensidad: {value} (Simulado)"
          
-    url = f"http://{ROBOT_IP}/control?var=led_intensity&val={value}"
-    try:
-        threading.Thread(target=lambda: requests.get(url, timeout=0.5), daemon=True).start()
-        return f"Intensidad: {value} (Enviado)"
-    except Exception as e:
-        return f"Error: {e}"
+    publish_command("hermes/control", {"command": "LED", "val": value})
+    return f"Intensidad: {value} (Enviado)"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # GAS MAP & ADVANCED VISUALIZATION

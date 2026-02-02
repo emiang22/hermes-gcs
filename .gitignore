@@ -62,3 +62,8 @@ mission_data.db
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Legacy Files (Do not commit)
+MPU6050 (1).py
+config (2).py
+main (1).py
