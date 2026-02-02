@@ -1,16 +1,20 @@
-# 🦅 H.E.R.M.E.S. Ground Control Station (GCS) v2.0
+# H.E.R.M.E.S. Ground Control Station v2.1 🚀
 
-**Sistema de Monitoreo y Teleoperación para Robots de Rescate en Espacios Confinados.**
+Sistema de control avanzado para el robot de rescate **H.E.R.M.E.S.** (Herramienta de Exploración y Rescate con Módulos Especializados).
 
 ![Status](https://img.shields.io/badge/Status-Stable-success)
 ![Python](https://img.shields.io/badge/Python-3.13-blue)
 ![Dash](https://img.shields.io/badge/Dash-2.0-orange)
 
-La **GCS H.E.R.M.E.S. v2.0** es una interfaz de comando avanzada diseñada para operar robots exploradores en entornos peligrosos. Permite la visualización en tiempo real de datos de sensores, mapeo 3D de gases peligrosos, y análisis forense de misiones.
+La **GCS H.E.R.M.E.S. v2.1** es una interfaz de comando avanzada diseñada para operar robots exploradores. Incluye **Piloto Automático (PID)**, **Conexión Dinámica** y **IA de Audio**.
 
 ---
 
-## 🚀 Características Principales
+## 🚀 Novedades v2.1 (Febrero 2026)
+*   **Piloto Automático (PID)**: El robot usa el giroscopio para mantener la línea recta automáticamente.
+*   **Conexión Dinámica**: Ventana de inicio para configurar IPs al vuelo o entrar en modo **Simulación**.
+*   **Soporte Multi-IP**: Usa una ESP32-CAM independiente junto al ESP32 de control.
+*   **Protocolo MQTT**: Comunicación asíncrona ultra-rápida.
 
 *   **📊 Telemetría en Tiempo Real**: Visualización de PPM (MQ-2), CO2, temperatura, humedad y estado de batería.
 *   **🗺️ Mapeo de Gases 3D**: Generación dinámica de mapas de calor (Heatmaps) interpolados sobre el terreno explorado.
