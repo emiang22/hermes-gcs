@@ -24,6 +24,7 @@ from src.config import CONFIG, ROBOT_IP, CAMERA_PORT, MQTT_BROKER
 from src.state import state, db_manager # db_manager starts automatically
 from src.services.mqtt import start_mqtt, publish_command
 from src.services.replay import replay_service
+from src.services.simulation import start_simulation
 from src.ui.app_layout import get_layout, COLORS
 from src.ui.views.teleop import view_teleop
 from src.ui.views.sensors import view_sensors
@@ -138,6 +139,41 @@ def fast_update_global(n):
     
     return (clock, connection_indicator, alert_indicator, f"{battery_pct}%", battery_pct, 
             f"{rssi} dBm", rssi_pct, alert_banner)
+
+# Callbacks for Connection Modal
+@app.callback(
+    Output("connection-modal", "opened"),
+    Output("connection-status", "children"),
+    Input("btn-connect-system", "n_clicks"),
+    Input("btn-simulate", "n_clicks"),
+    State("input-broker-ip", "value"),
+    State("input-camera-ip", "value"),
+    prevent_initial_call=True
+)
+def handle_connection(n_connect, n_simulate, broker_ip, camera_ip):
+    ctx = dash.callback_context
+    if not ctx.triggered: return dash.no_update
+    btn_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    
+    if btn_id == "btn-simulate":
+        state.log("Iniciando Modo Simulado", "INFO")
+        start_simulation()
+        return False, dmc.Badge("SIMULACIÓN", color="orange")
+        
+    if btn_id == "btn-connect-system":
+        if not broker_ip: return dash.no_update
+        state.log(f"Conectando a {broker_ip}...", "INFO")
+        
+        # Update Runtime Config
+        CONFIG["mqtt_broker"] = broker_ip
+        CONFIG["camera_ip"] = camera_ip if camera_ip else broker_ip
+        
+        # Actually start MQTT now
+        threading.Thread(target=lambda: start_mqtt(broker_ip), daemon=True).start()
+        
+        return False, dmc.Badge("CONECTANDO...", color="yellow")
+    
+    return dash.no_update
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # REPLAY CALLBACKS
@@ -469,9 +505,10 @@ def update_video_source(n, current_src):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    if CONFIG["mqtt_broker"]:
-        threading.Thread(target=start_mqtt, daemon=True).start()
+    # Removed auto-start of MQTT to wait for user input
+    # if CONFIG["mqtt_broker"]:
+    #     threading.Thread(target=start_mqtt, daemon=True).start()
     
     print("🚀 H.E.R.M.E.S. Ground Control Station v2.0 (Modular) Starting...")
-    print(f"📡 MQTT Broker: {CONFIG['mqtt_broker']}")
-    app.run(debug=True, host="127.0.0.1", port=8050)
+    print("Waiting for Connection Modal input...")
+    app.run_server(debug=True, port=8050)

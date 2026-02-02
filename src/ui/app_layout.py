@@ -109,12 +109,32 @@ def get_layout():
             html.Div(style={"display": "flex", "flex": "1", "overflow": "hidden"}, children=[
                 create_sidebar(),
                 html.Div(id="main-content", style={"flex": "1", "padding": "20px", "overflowY": "auto"}, children=[
-                    # Views will be injected here by callback or pre-loaded hidden divs
                     html.Div(id="view-container")
                 ]),
             ]),
             dcc.Interval(id="interval-fast", interval=500),
             dcc.Interval(id="interval-slow", interval=2000),
             dcc.Store(id="current-view", data="teleop"),
+            
+            # --- CONNECTION MODAL ---
+            dmc.Modal(
+                id="connection-modal",
+                opened=True, # Open by default on load
+                closeOnClickOutside=False,
+                closeOnEscape=False,
+                withCloseButton=False,
+                centered=True,
+                title=dmc.Title("Conexión Hermes GCS", order=3, style={"fontFamily": "'Orbitron'"}),
+                children=[
+                    dmc.Text("Ingrese las direcciones IP para conectar.", size="sm", color="dimmed", style={"marginBottom": 16}),
+                    dmc.TextInput(id="input-broker-ip", label="MQTT Broker / Robot IP", value=CONFIG["mqtt_broker"], style={"marginBottom": 10}),
+                    dmc.TextInput(id="input-camera-ip", label="Cámara IP (ESP32-CAM)", value=CONFIG.get("camera_ip", CONFIG["mqtt_broker"]), style={"marginBottom": 20}),
+                    
+                    dmc.Group(position="right", spacing="sm", children=[
+                        dmc.Button("Modo Simulado", id="btn-simulate", variant="subtle", color="gray"),
+                        dmc.Button("Conectar", id="btn-connect-system", color="teal"),
+                    ])
+                ]
+            )
         ])
     )

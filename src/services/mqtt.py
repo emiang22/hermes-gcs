@@ -91,7 +91,8 @@ def on_mqtt_message(client, userdata, msg):
     except Exception as e:
         state.log(f"Error procesando MQTT: {str(e)}", "ERROR")
 
-def start_mqtt():
+def start_mqtt(broker_host=None):
+    host = broker_host or MQTT_BROKER
     try:
         try:
             client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -104,9 +105,10 @@ def start_mqtt():
         client.on_connect = on_mqtt_connect
         client.on_disconnect = on_mqtt_disconnect
         client.on_message = on_mqtt_message
-        state.log(f"Intentando conectar MQTT: {MQTT_BROKER}")
+        
+        state.log(f"Conectando a {host}:{MQTT_PORT}...", "INFO")
         try:
-            client.connect(MQTT_BROKER, MQTT_PORT, keepalive=5)
+            client.connect(host, MQTT_PORT, keepalive=5)
             client.loop_start()
         except:
             state.log("MQTT Inicial no disponible. Continuando...", "WARN")
