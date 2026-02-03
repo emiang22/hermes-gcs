@@ -89,6 +89,14 @@ def connect_wifi():
     print(f"[WIFI] Connected: {wlan.ifconfig()[0]}")
     return True
 
+def check_wifi():
+    """Check WiFi connection and reconnect if needed."""
+    wlan = network.WLAN(network.STA_IF)
+    if not wlan.isconnected():
+        print("[WIFI] Connection lost, reconnecting...")
+        return connect_wifi()
+    return True
+
 def mqtt_callback(topic, msg):
     try:
         t = topic.decode()
@@ -120,6 +128,13 @@ def mqtt_callback(topic, msg):
 async def maintain_mqtt_connection(client):
     while True:
         try:
+            # Check WiFi first
+            if not check_wifi():
+                state.connected = False
+                motors.stop()
+                await asyncio.sleep(5)
+                continue
+                
             if not state.connected:
                 print(f"[MQTT] Connecting to {MQTT_BROKER}...")
                 client.set_callback(mqtt_callback)
@@ -187,7 +202,7 @@ async def task_sensors_fast(client):
                 client.publish(TOPIC_GAS, ujson.dumps({
                     "sensor_data": {
                         "ppm": ppm, "voltage": voltage,
-                        "alert_status": "CRITICAL" if ppm > 1000 else "Normal" 
+                        "alert_status": "critical" if ppm > 1000 else "normal" 
                     }
                 }))
                 
@@ -241,7 +256,7 @@ async def main_loop():
     scd30.start_continuous()
 
     client = MQTTClient(state.client_id, MQTT_BROKER, port=MQTT_PORT, 
-                        user=MQTT_USER, password=MQTT_PASSWORD, keepalive=60)
+                        user=MQTT_USER, password=MQTT_PASSWORD, keepalive=MQTT_KEEPALIVE)
 
     asyncio.create_task(maintain_mqtt_connection(client))
     asyncio.create_task(task_navigation()) # PID runs here

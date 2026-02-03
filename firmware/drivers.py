@@ -262,37 +262,42 @@ class UltrasonicDriver:
         return self.i2c.readfrom(self.addr, 1)[0]
         
     def get_distance_cm(self):
-        # Trigger High -> Low (Pulse)
-        # Trig on Bit 2, Echo on Bit 1
-        
-        # Ensure Trig is LOW
-        self.pcf_state &= ~(1 << ULTRASONIC_TRIG_BIT)
-        self._write(self.pcf_state)
-        time.sleep_us(5)
-        
-        # Trigger HIGH
-        self.pcf_state |= (1 << ULTRASONIC_TRIG_BIT)
-        self._write(self.pcf_state)
-        time.sleep_us(10)
-        
-        # Trigger LOW
-        self.pcf_state &= ~(1 << ULTRASONIC_TRIG_BIT)
-        self._write(self.pcf_state)
-        
-        # Wait for echo HIGH
-        t0 = time.ticks_us()
-        while not (self._read() & (1 << ULTRASONIC_ECHO_BIT)):
-            if time.ticks_diff(time.ticks_us(), t0) > 20000: return -1
+        """Get distance in cm. Returns -1 on error or timeout."""
+        try:
+            # Trigger High -> Low (Pulse)
+            # Trig on Bit 2, Echo on Bit 1
             
-        t1 = time.ticks_us()
-        # Wait for echo LOW
-        while (self._read() & (1 << ULTRASONIC_ECHO_BIT)):
-            if time.ticks_diff(time.ticks_us(), t1) > 20000: return -1
+            # Ensure Trig is LOW
+            self.pcf_state &= ~(1 << ULTRASONIC_TRIG_BIT)
+            self._write(self.pcf_state)
+            time.sleep_us(5)
             
-        t2 = time.ticks_us()
-        duration = time.ticks_diff(t2, t1)
-        
-        return (duration * 0.0343) / 2
+            # Trigger HIGH
+            self.pcf_state |= (1 << ULTRASONIC_TRIG_BIT)
+            self._write(self.pcf_state)
+            time.sleep_us(10)
+            
+            # Trigger LOW
+            self.pcf_state &= ~(1 << ULTRASONIC_TRIG_BIT)
+            self._write(self.pcf_state)
+            
+            # Wait for echo HIGH
+            t0 = time.ticks_us()
+            while not (self._read() & (1 << ULTRASONIC_ECHO_BIT)):
+                if time.ticks_diff(time.ticks_us(), t0) > 20000: return -1
+                
+            t1 = time.ticks_us()
+            # Wait for echo LOW
+            while (self._read() & (1 << ULTRASONIC_ECHO_BIT)):
+                if time.ticks_diff(time.ticks_us(), t1) > 20000: return -1
+                
+            t2 = time.ticks_us()
+            duration = time.ticks_diff(t2, t1)
+            
+            return (duration * 0.0343) / 2
+        except Exception as e:
+            print(f"[Ultrasonic] Error: {e}")
+            return -1
 
 # ============================================================================
 # SCD30 DRIVER
