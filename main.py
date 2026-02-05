@@ -9,6 +9,7 @@ import datetime
 import numpy as np
 import plotly.graph_objects as go
 import math
+import requests
 
 try:
     from scipy.interpolate import griddata
@@ -18,7 +19,7 @@ except ImportError:
     print("WARNING: scipy not installed. Gas heatmap interpolation will be basic.")
 
 # Import internal modules
-from src.config import CONFIG, CAMERA_PORT
+from src.config import CONFIG, CAMERA_PORT, ROBOT_IP
 from src.state import state, db_manager # db_manager starts automatically
 from src.services.mqtt import start_mqtt, publish_command
 from src.services.replay import replay_service
@@ -568,6 +569,212 @@ def update_video_source(n, current_src):
     if current_src != target_src:
         return target_src
     return dash.no_update
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FLOATING CONTROL PANEL CALLBACKS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. VIEW-BASED VISIBILITY (MODIFIED FOR OPACITY)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.callback(
+    [Output("floating-minimized-icon", "style", allow_duplicate=True),
+     Output("floating-window", "style", allow_duplicate=True),
+     Output("floating-hidden-by-view", "data")],
+    [Input("current-view", "data")],
+    [State("floating-panel-state", "data"),
+     State("floating-minimized-icon", "style"),
+     State("floating-window", "style")],
+    prevent_initial_call=True
+)
+def handle_view_change(current_view, panel_state, icon_style, window_style):
+    """Show/hide floating panel based on current view"""
+    icon_style = icon_style or {}
+    window_style = window_style or {}
+    
+    if current_view == "teleop":
+        # Hide both with opacity
+        icon_style["opacity"] = "0"
+        icon_style["pointerEvents"] = "none"
+        window_style["opacity"] = "0"
+        window_style["pointerEvents"] = "none"
+        return icon_style, window_style, True
+    else:
+        # Show the appropriate one (JavaScript handles which)
+        icon_style.pop("opacity", None)
+        icon_style.pop("pointerEvents", None)
+        window_style.pop("opacity", None)
+        window_style.pop("pointerEvents", None)
+        return icon_style, window_style, False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. ROBOT CONTROL FROM FLOATING PANEL
+# ─────────────────────────────────────────────────────────────────────────────
+@app.callback(
+    Output({"type": "floating-nav", "index": ALL}, "className"),
+    [Input({"type": "floating-nav", "index": ALL}, "n_clicks")],
+    prevent_initial_call=True
+)
+def control_robot_from_floating(clicks):
+    """Handle robot movement commands from floating panel buttons"""
+    ctx = callback_context
+    num_buttons = len(clicks) if clicks else 4
+    default_classes = ["floating-arrow-btn"] * num_buttons
+    
+    if not ctx.triggered or not any(c for c in clicks if c):
+        return default_classes
+    
+    triggered_id = ctx.triggered[0]["prop_id"]
+    try:
+        import ast
+        id_dict = ast.literal_eval(triggered_id.split(".")[0])
+        direction = id_dict["index"]
+    except:
+        return default_classes
+    
+    if state.status["mode"] in ["SIMULACIÓN", "REPLAY", "REPLAY FILE"]:
+        state.log(f"Control ignorado: {direction} (modo simulación/replay)", "WARN")
+        return default_classes
+    
+    cmd = {
+        "forward": "FORWARD",
+        "backward": "BACKWARD",
+        "left": "LEFT",
+        "right": "RIGHT"
+    }.get(direction, "STOP")
+    
+    state.log(f"Comando flotante: {cmd}")
+    
+    try:
+        threading.Thread(
+            target=lambda: requests.get(
+                f"http://{ROBOT_IP}/control?var=move&val={cmd.lower()}",
+                timeout=0.5
+            ),
+            daemon=True
+        ).start()
+    except Exception as e:
+        state.log(f"Error enviando comando: {e}", "ERROR")
+    
+    return default_classes
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. CAMERA MODE SWITCHING (simplified - only normal layout now)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.callback(
+    [Output({"type": "cam-mode-normal", "index": ALL}, "style"),
+     Output({"type": "cam-mode-normal", "index": ALL}, "className"),
+     Output("floating-camera-mode", "data")],
+    [Input({"type": "cam-mode-normal", "index": ALL}, "n_clicks")],
+    [State("floating-camera-mode", "data")],
+    prevent_initial_call=True
+)
+def switch_camera_mode(clicks, current_mode):
+    """Switch between RGB, IR, and Thermal camera modes"""
+    ctx = callback_context
+    
+    if not ctx.triggered or not any(c for c in clicks if c):
+        return (dash.no_update,) * 3
+    
+    triggered_id = ctx.triggered[0]["prop_id"]
+    try:
+        import ast
+        id_dict = ast.literal_eval(triggered_id.split(".")[0])
+        new_mode = id_dict["index"]
+    except:
+        return (dash.no_update,) * 3
+    
+    modes = ["rgb", "ir", "thermal"]
+    styles = []
+    classes = []
+    
+    for mode in modes:
+        is_active = (mode == new_mode)
+        style = {
+            "border": f"1px solid {COLORS['accent_primary'] if is_active else COLORS['border']}",
+            "color": COLORS['text_primary'] if is_active else COLORS['text_secondary'],
+            "opacity": "0.4" if is_active else "0.3",
+        }
+        classname = "cam-mode-btn-base cam-mode-btn cam-mode-active" if is_active else "cam-mode-btn-base cam-mode-btn"
+        
+        styles.append(style)
+        classes.append(classname)
+    
+    state.log(f"Modo de cámara: {new_mode.upper()}", "INFO")
+    
+    return styles, classes, new_mode
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. UPDATE VIDEO FEED
+# ─────────────────────────────────────────────────────────────────────────────
+@app.callback(
+    Output("floating-video-feed", "src"),
+    [Input("interval-slow", "n_intervals")],
+    [State("floating-video-feed", "src")],
+    prevent_initial_call=True
+)
+def update_floating_video_source(n, current_src):
+    """Update video source based on connection mode"""
+    is_sim = state.status["mode"] in ["SIMULACIÓN", "REPLAY FILE", "ESPERANDO"]
+    target_src = "/video_feed_local" if is_sim else f"http://{ROBOT_IP}:{CAMERA_PORT}/stream"
+    
+    if current_src != target_src:
+        return target_src
+    return dash.no_update
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. UTILITY BUTTONS
+# ─────────────────────────────────────────────────────────────────────────────
+@app.callback(
+    Output("floating-btn-lights", "children", allow_duplicate=True),
+    [Input("floating-btn-lights", "n_clicks")],
+    prevent_initial_call=True
+)
+def floating_toggle_lights(n):
+    if not n:
+        return dash.no_update
+    
+    if state.status["mode"] != "MQTT":
+        state.log("Luces alternadas (simulado)", "INFO")
+        return dash.no_update
+    
+    state.log("Luces alternadas", "INFO")
+    return dash.no_update
+
+
+@app.callback(
+    Output("floating-btn-speaker", "children", allow_duplicate=True),
+    [Input("floating-btn-speaker", "n_clicks")],
+    prevent_initial_call=True
+)
+def floating_activate_speaker(n):
+    if not n:
+        return dash.no_update
+    
+    if state.status["mode"] != "MQTT":
+        state.log("Bocina activada (simulado)", "INFO")
+        return dash.no_update
+    
+    state.log("Bocina activada", "INFO")
+    return dash.no_update
+
+
+@app.callback(
+    Output("floating-btn-extra", "children", allow_duplicate=True),
+    [Input("floating-btn-extra", "n_clicks")],
+    prevent_initial_call=True
+)
+def floating_extra_function(n):
+    if not n:
+        return dash.no_update
+    
+    state.log("Función extra (TBD)", "INFO")
+    return dash.no_update
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN EXECUTION
